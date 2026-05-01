@@ -1,0 +1,6 @@
+{
+  "name": "Futbolista PWA",
+  "description": "App de fútbol offline-first con posiciones y partidos de las grandes ligas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
