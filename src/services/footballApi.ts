@@ -2,24 +2,44 @@ import { Liga, Equipo, TablaPosiciones, Partido, db } from '../db/database';
 
 const BASE_URL = 'https://api.football-data.org/v4';
 const PROXY_URL = 'https://api.allorigins.win/raw?url=';
-const API_KEY = import.meta.env.VITE_FOOTBALL_API_KEY;
 
-export async function fetchWithCache(leagueCode: string) {
+export async function fetchWithCache(leagueCode: string, customApiKey?: string) {
+  const API_KEY = customApiKey || import.meta.env.VITE_FOOTBALL_API_KEY;
+
   if (!API_KEY) {
-    console.warn('VITE_FOOTBALL_API_KEY no encontrada.');
-    return;
+    throw new Error('No se encontró la API Key. Por favor, configúrala en el menú.');
   }
 
-  const headers = { 'X-Auth-Token': API_KEY };
+  const headers = { 
+    'X-Auth-Token': API_KEY,
+    'Accept': 'application/json'
+  };
 
   try {
-    // 1. Fetch Standing (Posiciones)
-    const standingsUrl = `${BASE_URL}/competitions/${leagueCode}/standings`;
-    const standingsRes = await fetch(`${PROXY_URL}${encodeURIComponent(standingsUrl)}`, { headers });
-    
-    if (!standingsRes.ok) throw new Error(`Proxy status: ${standingsRes.status}`);
+    // Intentamos usar la ruta directa si estamos en Vercel o local con rewrites, 
+    // sino usamos el proxy de fallback.
+    const getStandingUrl = (code: string) => `${BASE_URL}/competitions/${code}/standings`;
+    const getMatchesUrl = (code: string) => `${BASE_URL}/competitions/${code}/matches?limit=40`;
 
-    const data = await standingsRes.json();
+    // Intentamos fetch. Nota: Si falla por CORS, el catch lo capturará.
+    let response;
+    try {
+      // Intento 1: A través de Vercel Rewrite (si existe)
+      response = await fetch(`/api/football/competitions/${leagueCode}/standings`, { headers });
+      if (!response.ok) throw new Error('Rewrite not available');
+    } catch {
+      // Intento 2: A través de AllOrigins Proxy
+      const url = getStandingUrl(leagueCode);
+      response = await fetch(`${PROXY_URL}${encodeURIComponent(url)}`, { headers });
+    }
+    
+    if (!response.ok) {
+      if (response.status === 403) throw new Error('API Key inválida o sin permisos (Plan Free limitado)');
+      if (response.status === 429) throw new Error('Demasiadas peticiones. Espera un minuto.');
+      throw new Error(`Error de red: ${response.status}`);
+    }
+
+    const data = await response.json();
 
     // Validar si la API devolvió un error (ej: Token inválido)
     if (data.message && !data.competition) {
@@ -65,9 +85,15 @@ export async function fetchWithCache(leagueCode: string) {
     await db.standings.where('ligaId').equals(league.id).delete();
     await db.standings.bulkPut(standingsToSave);
 
-    // 2. Fetch Matches (Últimos y próximos)
-    const matchesUrl = `${BASE_URL}/competitions/${leagueCode}/matches?limit=40`;
-    const matchesRes = await fetch(`${PROXY_URL}${encodeURIComponent(matchesUrl)}`, { headers });
+    // 2. Fetch Matches
+    let matchesRes;
+    try {
+      matchesRes = await fetch(`/api/football/competitions/${leagueCode}/matches?limit=40`, { headers });
+      if (!matchesRes.ok) throw new Error('Rewrite failed');
+    } catch {
+      const mUrl = getMatchesUrl(leagueCode);
+      matchesRes = await fetch(`${PROXY_URL}${encodeURIComponent(mUrl)}`, { headers });
+    }
     
     if (matchesRes.ok) {
         const matchesData = await matchesRes.json();

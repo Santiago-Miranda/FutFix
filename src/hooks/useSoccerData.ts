@@ -6,6 +6,7 @@ import { fetchWithCache } from '../services/footballApi';
 export function useSoccerData(leagueCode: string) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState(localStorage.getItem('football_api_key') || '');
 
   const league = useLiveQuery(() => db.leagues.where('codigo').equals(leagueCode).first(), [leagueCode]);
   const standings = useLiveQuery(() => {
@@ -17,28 +18,39 @@ export function useSoccerData(leagueCode: string) {
     return db.matches.where('ligaId').equals(league.id).sortBy('fecha');
   }, [league]);
 
-  useEffect(() => {
-    async function sync() {
-      if (!leagueCode) return;
-      
-      // Intentar actualizar si no hay datos o los datos tienen más de 1 hora
-      const lastUpdated = league?.lastUpdated || 0;
-      const oneHour = 60 * 60 * 1000;
-      
-      if (!league || (Date.now() - lastUpdated > oneHour)) {
-        setLoading(true);
-        try {
-          await fetchWithCache(leagueCode);
-          setError(null);
-        } catch (e) {
-          setError('No se pudo actualizar los datos. Usando versión local.');
-        } finally {
-          setLoading(false);
-        }
-      }
+  const sync = async (overrideKey?: string) => {
+    if (!leagueCode) return;
+    const keyToUse = overrideKey || apiKey || import.meta.env.VITE_FOOTBALL_API_KEY;
+    
+    if (!keyToUse) {
+      setError('Configura tu API Key en la barra lateral para descargar datos.');
+      return;
     }
 
-    sync();
+    setLoading(true);
+    try {
+      await fetchWithCache(leagueCode, keyToUse);
+      setError(null);
+    } catch (e: any) {
+      setError(`${e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateApiKey = (newKey: string) => {
+    localStorage.setItem('football_api_key', newKey);
+    setApiKey(newKey);
+    sync(newKey);
+  };
+
+  useEffect(() => {
+    const lastUpdated = league?.lastUpdated || 0;
+    const oneHour = 60 * 60 * 1000;
+    
+    if (!league || (Date.now() - lastUpdated > oneHour)) {
+      sync();
+    }
   }, [leagueCode, league?.id]);
 
   return {
@@ -46,6 +58,7 @@ export function useSoccerData(leagueCode: string) {
     standings,
     matches,
     loading,
-    error
+    error,
+    refresh: sync
   };
 }

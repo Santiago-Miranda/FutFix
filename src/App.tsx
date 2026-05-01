@@ -15,10 +15,28 @@ export default function App() {
   const [selectedLeague, setSelectedLeague] = useState(LEAGUES[0]);
   const [activeTab, setActiveTab] = useState<'standings' | 'matches'>('standings');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
-  const { league, standings, matches, loading, error } = useSoccerData(selectedLeague.code);
+  const { 
+    league, 
+    standings, 
+    matches, 
+    loading, 
+    error, 
+    refresh 
+  } = useSoccerData(selectedLeague.code);
 
-  const hasApiKey = !!import.meta.env.VITE_FOOTBALL_API_KEY;
+  const apiKey = localStorage.getItem('football_api_key') || '';
+
+  const handleApiKeySubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const key = formData.get('apiKey') as string;
+    if (key) {
+      localStorage.setItem('football_api_key', key);
+      window.location.reload(); 
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col md:flex-row overflow-hidden">
@@ -77,13 +95,30 @@ export default function App() {
               </div>
             </div>
 
-            <div className="mt-auto pt-6 border-t border-white/5">
-              {!hasApiKey && (
-                <div className="bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-xl flex gap-3 text-xs text-yellow-500 mb-4">
-                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                  <p>Sin API Key. Mostrando solo datos en caché. Configura VITE_FOOTBALL_API_KEY para actualizar.</p>
-                </div>
+            <div className="mt-auto pt-6 border-t border-white/5 space-y-4">
+              <button 
+                onClick={() => setShowSettings(!showSettings)}
+                className="w-full flex items-center gap-2 text-xs font-medium text-slate-400 hover:text-slate-100 transition-colors"
+              >
+                <Info className="w-4 h-4" />
+                Configurar API Key
+              </button>
+
+              {showSettings && (
+                <form onSubmit={handleApiKeySubmit} className="space-y-2">
+                  <input 
+                    name="apiKey"
+                    type="password"
+                    placeholder="Pega tu API Key aquí"
+                    defaultValue={apiKey}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs focus:border-blue-500 outline-none transition-all"
+                  />
+                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold uppercase py-2 rounded-lg transition-all">
+                    Guardar y Recargar
+                  </button>
+                </form>
               )}
+
               <div className="flex items-center gap-3 text-slate-500">
                 <div className="w-2 h-2 rounded-full bg-green-500"></div>
                 <span className="text-xs font-medium">Modo PWA / Offline</span>
