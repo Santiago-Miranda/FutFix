@@ -32,7 +32,10 @@ export function useSoccerData(leagueCode: string) {
       await fetchWithCache(leagueCode, keyToUse);
       setError(null);
     } catch (e: any) {
-      setError(`${e.message}`);
+      let msg = e.message || 'Error desconocido';
+      if (msg.includes('429')) msg = 'Límite de peticiones excedido (Plan Free: 10/min). Espera un poco.';
+      if (msg.includes('403')) msg = 'Acceso denegado. Esta liga podría no estar en el plan gratuito.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
